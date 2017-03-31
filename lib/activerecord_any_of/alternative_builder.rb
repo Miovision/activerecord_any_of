@@ -34,7 +34,14 @@ module ActiverecordAnyOf
               query = where(*query)
             end
 
-            self.queries_bind_values += query.bind_values if query.bind_values.any?
+            #For rails 4.2, query.bind_values.inspect gave this:
+            #[[#<ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter::Column:0x007fd418b6dc00 @strict=true, @collation="utf8_unicode_ci", @extra="", @name="owner_type", @cast_type=#<ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter::MysqlString:0x007fd418b66f18 @precision=nil, @scale=nil, @limit=255>, @sql_type="varchar(255)", @null=true, @default=nil, @default_function=nil>, "Comment"]]
+            #For rails 5.0, query.bind_values.inspect gave this:
+            #[]
+
+            #For rails 5.0, query.bound_attributes gives this, which is what we want
+            ##<ActiveRecord::Relation::QueryAttribute:0x007fa47fdea2f8 @name="owner_type", @value_before_type_cast="Comment", @type=#<ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter::MysqlString:0x007fa482b3e9c0 @precision=nil, @scale=nil, @limit=255>, @original_attribute=nil, @value="Comment", @value_for_database="Comment">]
+            self.queries_bind_values += query.bound_attributes if query.bound_attributes.any?
             queries_joins_values[:includes].concat(query.includes_values) if query.includes_values.any?
             queries_joins_values[:joins].concat(query.joins_values) if query.joins_values.any?
             queries_joins_values[:references].concat(query.references_values) if ActiveRecord::VERSION::MAJOR >= 4 && query.references_values.any?
@@ -87,7 +94,7 @@ module ActiverecordAnyOf
 
         def with_statement_cache
           if queries && queries_bind_values.any?
-            relation = where([unprepare_query(queries.reduce(:or).to_sql), *queries_bind_values.map { |v| v[1] }])
+            relation = where([unprepare_query(queries.reduce(:or).to_sql), *queries_bind_values.map { |v| v.value }])
           else
             relation = where(queries.reduce(:or).to_sql)
           end
@@ -107,7 +114,7 @@ module ActiverecordAnyOf
         def with_statement_cache
           if ActiveRecord::VERSION::MAJOR >= 4
             if queries && queries_bind_values.any?
-              relation = where.not([unprepare_query(queries.reduce(:or).to_sql), *queries_bind_values.map { |v| v[1] }])
+              relation = where.not([unprepare_query(queries.reduce(:or).to_sql), *queries_bind_values.map { |v| v.value }])
             else
               relation = where.not(queries.reduce(:or).to_sql)
             end
